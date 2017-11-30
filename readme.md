@@ -30,5 +30,6 @@ sess.auth_change_site('sales')
 
 # TODO:
  - documentation
+ - start writing test cases (helps with documentation)
  - fill in rest of the api
  

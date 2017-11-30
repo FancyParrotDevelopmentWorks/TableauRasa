@@ -13,6 +13,17 @@ class TableauJSONAPI(object):
 
     def __init__(self, server_url = None, username = None, password = None, config_file = None):
 
+        """
+            Notes:
+                self.post_sleep is the time allowed for post requests to process so that the index on tableau server
+                can update, feel free to override, but may cause race conditions
+        :param server_url:
+        :param username:
+        :param password:
+        :param config_file:
+        """
+        self.post_sleep = 2
+
         if config_file is not None:
             self._set_from_config(config_file)
         else:
@@ -46,14 +57,13 @@ class TableauJSONAPI(object):
         url = self.base_url + url_route
         resp = requests.post(url, headers = self.auth_headers, json=payload)
         resp.raise_for_status()
+        print 'pausing', self.post_sleep, 'seconds to let index update'
+        time.sleep(self.post_sleep)
         return resp.json()
 
-    def _handle_post(self, route, payload, name, wait):
+    def _handle_post(self, route, payload, name):
         try:
-            resp = self._post_json(route, payload=payload)
-            print 'pausing', wait, 'seconds to let index update'
-            time.sleep(wait) #done so that we give the index time to update
-            return resp
+            return self._post_json(route, payload=payload)
         except requests.HTTPError as e:
             if str(e).startswith('409'):
                 print '{url} post: {name} Already Exists'.format(url=route, name=name)
@@ -149,7 +159,7 @@ class TableauJSONAPI(object):
         url_route  = '/sites/{site_id}/users/{user_id}'.format(user_id = user_id)
         return self._get_json(url_route)
 
-    def users_add_user_to_site(self, user_name, site_role = 'Interactor', sleep_in_seconds = 2):
+    def users_add_user_to_site(self, user_name, site_role = 'Interactor'):
         url_route = '/sites/{site_id}/users'.format(site_id=self.site_id)
         payload = {
             'user': {
@@ -157,26 +167,25 @@ class TableauJSONAPI(object):
                 'siteRole': site_role
             }
         }
-        return self._handle_post(route=url_route, payload=payload, name=user_name, wait=sleep_in_seconds)
+        return self._handle_post(route=url_route, payload=payload, name=user_name)
 
     def groups_query_groups(self):
         url_route = '/sites/{site_id}/groups'.format(site_id = self.site_id)
         return self._get_json(url_route)
 
-    def groups_create_group(self, group_name, sleep_in_seconds = 2):
+    def groups_create_group(self, group_name):
         url_route = '/sites/{site_id}/groups'.format(site_id = self.site_id)
         payload = {
             'group': {'name': group_name}
         }
-        return self._handle_post(route=url_route, payload=payload, name=group_name, wait=sleep_in_seconds)
+        return self._handle_post(route=url_route, payload=payload, name=group_name)
 
-    def groups_add_user_to_group(self, user_id, group_id, sleep_in_seconds = 2):
+    def groups_add_user_to_group(self, user_id, group_id):
         url_route = '/sites/{site_id}/groups/{group_id}/users'.format(site_id=self.site_id, group_id=group_id)
-        print url_route
         payload = {
             'user': {'id': user_id}
         }
-        return self._handle_post(route=url_route, payload=payload, name=user_id, wait=sleep_in_seconds)
+        return self._handle_post(route=url_route, payload=payload, name=user_id)
 
     def get_url(self, url):
         """
