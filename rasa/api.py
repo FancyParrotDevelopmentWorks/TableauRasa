@@ -78,6 +78,7 @@ class TableauJSONAPI(object):
         """
         return site_name.replace(' ', '')
 
+
     def auth_signin(self, site_url = ""):
 
         self.site_url = self._clean_site_name(site_url)
@@ -150,13 +151,26 @@ class TableauJSONAPI(object):
             site_id = self.site_id, get_usage_information = get_usage_information)
         return self._get_json(url_route)
 
-    def users_get_users_on_site(self, page_size = 1000, page_number = 1):
-        url_route = '/sites/{site_id}/users?pageSize={page_size}&pageNumber={page_number}' \
-            .format(site_id = self.site_id, page_size = page_size, page_number = page_number)
+    def workbooks_query_workbooks_for_sites(self, page_size = 1000, page_number = 1):
+        url_route = '/sites/{site_id}/workbooks?pageSize={page_size}&pageNumber={page_number}'
+        url_route = url_route.format(site_id=self.site_id, page_size=page_size, page_number=page_number)
         return self._get_json(url_route)
 
+    def workbooks_query_workbooks_connections(self, workbook_id):
+        url_route = '/sites/{site_id}/workbooks/{workbook_id}/connections'
+        url_route = url_route.format(site_id=self.site_id, workbook_id=workbook_id)
+        return self._get_json(url_route)
+
+    def users_get_users_on_site(self, page_size = 1000, page_number = 1, as_id_lookup_table = False):
+        url_route = '/sites/{site_id}/users?pageSize={page_size}&pageNumber={page_number}'
+        url_route = url_route.format(site_id = self.site_id, page_size = page_size, page_number = page_number)
+        resp = self._get_json(url_route)
+        if as_id_lookup_table:
+            return {user['name'].lower(): user['id'] for user in resp['users']['user']}
+        return resp
+
     def users_query_user_on_site(self, user_id):
-        url_route  = '/sites/{site_id}/users/{user_id}'.format(user_id = user_id)
+        url_route  = '/sites/{site_id}/users/{user_id}'.format(site_id = self.site_id, user_id = user_id)
         return self._get_json(url_route)
 
     def users_add_user_to_site(self, user_name, site_role = 'Interactor'):
@@ -204,8 +218,8 @@ class TableauJSONAPI(object):
         return [[group.lower(), name_id_hash.get(group.lower())] for group in group_name_list]
 
     def get_user_id_from_name(self, user_name_list=[]):
-        site_users = self.users_get_users_on_site()['users']['user']
-        user_id_hash = {user['name'].lower(): user['id'] for user in site_users}
+
+        user_id_hash = self.users_get_users_on_site(as_id_lookup_table=True)
 
         # preprocess un_list => lower username and pop from email if email is used
         pp_ = lambda un: un.lower().split('@')[0]
@@ -225,4 +239,24 @@ class TableauJSONAPI(object):
                     print 'Created Username', un, 'on Group', group_name
             except Exception as e:
                 print e
+
+    def script_get_workbooks_and_connections(self):
+        site_users = self.users_get_users_on_site(as_id_lookup_table=True)
+        id_to_name = {uid: un for un, uid in site_users.items()}
+        workbooks = self.workbooks_query_workbooks_for_sites()
+        print workbooks['pagination']['totalAvailable']
+
+        table = []
+        for workbook in workbooks['workbooks']['workbook']:
+            # print workbook
+            project, name, user_id = workbook['project']['name'], workbook['name'], workbook['owner']['id']
+            print name
+            for conn in self.workbooks_query_workbooks_connections(workbook['id'])['connections']['connection']:
+                time.sleep(0.25)
+                conn_name = conn['datasource']['name']
+                server = conn['serverAddress']
+                type_ = conn['type']
+                user_name = conn['userName']
+                table.append((project, name, id_to_name[user_id], conn_name, server, type_, user_name))
+        return table
 
